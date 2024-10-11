@@ -5,3 +5,4 @@ pydantic==1.10.7
 python-dotenv==1.0.0
 usaddress==0.5.10
 python-dateutil
+requests
