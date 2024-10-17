@@ -6,3 +6,4 @@ python-dotenv==1.0.0
 usaddress==0.5.10
 python-dateutil
 requests
+com.precisely.apis

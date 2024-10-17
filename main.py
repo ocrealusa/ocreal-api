@@ -11,7 +11,6 @@ import logging
 import time
 import json
 from datetime import datetime
-
 # Set up logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -41,6 +40,10 @@ app.add_middleware(
 # Configuration
 DATAFINITI_API_KEY = os.getenv("DATAFINITI_API_KEY")
 RENTCAST_API_KEY = os.getenv("RENTCAST_API_KEY")
+PRECISELY_API_KEY = os.getenv("PRECISELY_API_KEY")
+PRECISELY_API_SECRET = os.getenv("PRECISELY_API_SECRET")
+# Precisely API endpoint
+PRECISELY_PROPERTY_ATTRIBUTES_URL = "https://api.precisely.com/property/v2/attributes/byaddress"
 
 # API endpoints
 DATAFINITI_URL = "https://api.datafiniti.co/v4/properties/search"
@@ -329,7 +332,66 @@ async def get_analytics_data(address_request: AddressAnalyticsRequest):
         historical_performance=historical_performance
     )
 
+class PropertyAttributesRequest(BaseModel):
+    address: str
+    attributes: Optional[str] = "all"
 
+class PropertyAttributesResponse(BaseModel):
+    property_attributes: Dict[str, Any]
+
+def get_precisely_token():
+    auth_url = "https://api.precisely.com/oauth/token"
+    auth_data = {
+        "grant_type": "client_credentials"
+    }
+    try:
+        auth_response = requests.post(auth_url, auth=(PRECISELY_API_KEY, PRECISELY_API_SECRET), data=auth_data)
+        logger.info(f"Token request status code: {auth_response.status_code}")
+        logger.info(f"Token request response: {auth_response.text}")
+        
+        if auth_response.status_code == 200:
+            token_data = auth_response.json()
+            logger.info(f"Successfully obtained token: {token_data.get('access_token', '')[:10]}...")
+            return token_data["access_token"]
+        else:
+            logger.error(f"Failed to obtain token. Status code: {auth_response.status_code}, Response: {auth_response.text}")
+            raise HTTPException(status_code=401, detail=f"Failed to obtain Precisely API token. Status: {auth_response.status_code}")
+    except requests.RequestException as e:
+        logger.error(f"Request exception in get_precisely_token: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error obtaining Precisely API token: {str(e)}")
+
+@app.post("/property/attributes", response_model=PropertyAttributesResponse)
+async def get_property_attributes(request: PropertyAttributesRequest):
+    try:
+        token = get_precisely_token()
+        headers = {
+            "Authorization": f"Bearer {token}"
+        }
+        params = {
+            "address": request.address,
+            "attributes": request.attributes
+        }
+        
+        logger.info(f"Making request to Precisely API with params: {params}")
+        response = requests.get(PRECISELY_PROPERTY_ATTRIBUTES_URL, headers=headers, params=params)
+        logger.info(f"Precisely API response status code: {response.status_code}")
+        logger.info(f"Precisely API response headers: {response.headers}")
+        logger.info(f"Precisely API response content: {response.text[:500]}...")  # Log first 500 characters
+        
+        response.raise_for_status()
+        data = response.json()
+        
+        # Log the API response
+        log_api_response("Precisely", request.address, data)
+        
+        return PropertyAttributesResponse(property_attributes=data)
+    except requests.HTTPError as e:
+        logger.error(f"Precisely API HTTP error: {str(e)}")
+        logger.error(f"Response content: {e.response.text}")
+        raise HTTPException(status_code=e.response.status_code, detail=f"Precisely API error: {str(e)}")
+    except Exception as e:
+        logger.error(f"Unexpected error in get_property_attributes: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Unexpected error: {str(e)}")
 
 
 if __name__ == "__main__":
