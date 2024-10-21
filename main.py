@@ -49,6 +49,9 @@ PRECISELY_PROPERTY_ATTRIBUTES_URL = "https://api.precisely.com/property/v2/attri
 DATAFINITI_URL = "https://api.datafiniti.co/v4/properties/search"
 RENTCAST_URL = "https://api.rentcast.io/v1/avm/value"
 
+CLOUDCMA_API_KEY = os.getenv("CLOUDCMA_API_KEY")
+CLOUDCMA_URL = "https://cloudcma.com/properties/widget"
+
 @app.get("/")
 async def root():
     return {"message": "Welcome to the Home Value Estimator API 2024"}
@@ -392,6 +395,41 @@ async def get_property_attributes(request: PropertyAttributesRequest):
     except Exception as e:
         logger.error(f"Unexpected error in get_property_attributes: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Unexpected error: {str(e)}")
+
+
+class CloudCMAReportRequest(BaseModel):
+    mlsnum: str
+    email_to: str
+
+class CloudCMAReportResponse(BaseModel):
+    success: bool
+    message: str
+
+@app.post("/property/cloudcma-report", response_model=CloudCMAReportResponse)
+async def get_cloudcma_report(report_request: CloudCMAReportRequest):
+    if not CLOUDCMA_API_KEY:
+        raise HTTPException(status_code=500, detail="CloudCMA API key is not configured")
+
+    data = {
+        "api_key": CLOUDCMA_API_KEY,
+        "mlsnum": report_request.mlsnum,
+        "email_to": report_request.email_to
+    }
+
+    try:
+        response = requests.post(CLOUDCMA_URL, data=data)
+        response.raise_for_status()
+
+        # Log the API response
+        log_api_response("CloudCMA", f"MLS#{report_request.mlsnum}", response.json())
+
+        return CloudCMAReportResponse(
+            success=True,
+            message="CloudCMA report request submitted successfully"
+        )
+    except requests.RequestException as e:
+        logger.error(f"Error making CloudCMA API request: {e}")
+        raise HTTPException(status_code=500, detail=f"Error requesting CloudCMA report: {str(e)}")
 
 
 if __name__ == "__main__":
