@@ -405,10 +405,10 @@ class CloudCMAReportResponse(BaseModel):
     success: bool
     message: str
 
-@app.post("/property/cloudcma-report", response_model=CloudCMAReportResponse)
-async def get_cloudcma_report(report_request: CloudCMAReportRequest):
+@app.post("/property/report", response_model=CloudCMAReportResponse)
+async def get_report(report_request: CloudCMAReportRequest):
     if not CLOUDCMA_API_KEY:
-        raise HTTPException(status_code=500, detail="CloudCMA API key is not configured")
+        raise HTTPException(status_code=500, detail="Something Went Wrong")
 
     data = {
         "api_key": CLOUDCMA_API_KEY,
